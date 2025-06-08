@@ -57,16 +57,27 @@ async def schedule(uid, text, mode, payload, h, m, app):
             jq.run_daily(send, dt.time(h, m, tzinfo=tz),
                          days=(WEEK.index(d),), name=name,
                          data=dict(uid=uid, msg=text))
-    else:                               # one-off dates
+    else:                                   # one‑off dates
+        now_local = dt.datetime.now(tz)
         for ds in payload.split(","):
-            y,mo,dy = map(int, ds.split("-"))
-            when = dt.datetime(y,mo,dy,h,m, tzinfo=tz)
-            if when > dt.datetime.now(tz):
-                jq.run_once(send, when, data=dict(uid=uid, msg=text))
+            y, mo, dy = map(int, ds.split("-"))
+            when_local = dt.datetime(y, mo, dy, h, m, tzinfo=tz)
+           
+            # if the target time has already passed, skip it
+            delay = (when_local - now_local).total_seconds()
+            if delay <= 0:
+                continue
 
+            # schedule via *delay seconds* so we avoid any timezone confusion
+            jq.run_once(send, delay, data=dict(uid=uid, msg=text))
 async def send(ctx: ContextTypes.DEFAULT_TYPE):
-    d = ctx.job.data; await ctx.bot.send_message(d["uid"], f"🔔 {d['msg']}")
-
+    d = ctx.job.data
+    await ctx.bot.send_message(d["uid"], f"🔔 Reminder — {d['msg']}‼️")
+    # auto-prune one-off reminders
+    async with aiosqlite.connect(DB) as db:
+        await db.execute("DELETE FROM tasks WHERE text=? AND user=? AND mode='date'",
+                         (d["msg"], d["uid"]))
+        await db.commit()
 # ───────────────────────── commands ────────────────────────── #
 WELCOME = (
     "👋  Reminder Bot\n\n"
@@ -147,7 +158,7 @@ async def collect_time(u: Update, ctx):
     async with aiosqlite.connect(DB) as db:
         await db.execute("INSERT INTO tasks(user,text,mode,payload,hour,minute) VALUES(?,?,?,?,?,?)",
                          (uid, text, mode, payload, h, mn)); await db.commit()
-    await schedule(uid, text, mode, payload, h, mn, u.get_bot())
+    await schedule(uid, text, mode, payload, h, mn, ctx.application)
     await u.message.reply_text("✅ Saved!"); return ConversationHandler.END
 
 # ───────── list / delete ───────── #
@@ -222,13 +233,17 @@ async def main():
     app.add_handler(CommandHandler("list",    list_cmd))
     app.add_handler(CommandHandler("delete",  del_cmd))
 
-    # restore jobs
+    # initialize FIRST
+    await app.initialize()
+
+    # restore jobs NOW that job_queue exists
     async with aiosqlite.connect(DB) as db:
         async for uid,t,m,p,h,mn in (await db.execute(
                 "SELECT user,text,mode,payload,hour,minute FROM tasks")):
             await schedule(uid,t,m,p,h,mn,app)
 
-    await app.initialize(); await app.start(); await app.updater.start_polling()
+    await app.start()
+    await app.updater.start_polling()
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
