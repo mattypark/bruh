@@ -1,162 +1,232 @@
-###################################################################
-# 100-line, single-file Telegram Reminder Bot                     #
-# ▸ Unlimited tasks per user                                       #
-# ▸ /add  → pick weekdays + HH:MM or 7 pm style                    #
-# ▸ /list and /delete                                              #
-# ▸ NO env vars needed – hard-code your token on line 8            #
-# ▸ Tested with python-telegram-bot 22.1 + aiosqlite               #
-###################################################################
+################################################################################################
+# Telegram “To-Do Reminder” Bot – single file
+# • /add : one-off dates *or* weekly weekdays  → time  → saved
+# • /settz <Region/City> to set / change timezone
+# • /list  / /delete <n>
+# Requires: python-telegram-bot 22.x , aiosqlite     (pip install …)
+################################################################################################
 
-# print("DEBUG add2() fired, got:", u.message.text)
-# app.add_handler(MessageHandler(filters.ALL, raw_log), group=-1)
+BOT_TOKEN = "7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI"          #  ← change me
 
-BOT_TOKEN = "7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI"   # ← replace & save
+import asyncio, datetime as dt, logging, re, os, aiosqlite
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from telegram import Update, InlineKeyboardButton as Btn, InlineKeyboardMarkup as KB, constants as TG
+from telegram.ext import (
+    Application, CommandHandler, ConversationHandler,
+    MessageHandler, CallbackQueryHandler, ContextTypes, filters
+)
 
-import asyncio, datetime as dt, logging, re, aiosqlite
-from telegram import (Update, InlineKeyboardButton as Btn,
-                      InlineKeyboardMarkup as KB)
-from telegram.ext import (Application, CommandHandler, ConversationHandler,
-                          MessageHandler, CallbackQueryHandler, ContextTypes,
-                          filters)
+DB      = os.getenv("REMINDER_DB", "tasks.db")
+WEEK    = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+ASK_TXT, CHOOSE_KIND, GET_DATES, GET_WEEKDAYS, GET_TIME = range(5)
+DATE_RX = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}(?:,\d{4}-\d{1,2}-\d{1,2})*$")
+TIME_RX = re.compile(r"^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*$", re.I)
 
-DB = "tasks.db"
-WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-ASK_TEXT, ASK_DAY, ASK_TIME = range(3)
-TIME_RX = re.compile(r"^(\d{1,2})(?::(\d{2}))?(am|pm)?$", re.I)
-
-###################################################################
-# DB helpers
-###################################################################
+# ───────────────────────── database ───────────────────────── #
 async def init_db():
     async with aiosqlite.connect(DB) as db:
         await db.executescript("""
         CREATE TABLE IF NOT EXISTS tasks(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user INTEGER, text TEXT, days TEXT, h INT, m INT);
-        """)
-        await db.commit()
+          user INTEGER,
+          text TEXT,
+          mode TEXT,          -- 'date' | 'weekday'
+          payload TEXT,       -- YYYY-MM-DD,… or Mon,Tue
+          hour INT,
+          minute INT
+        );
+        CREATE TABLE IF NOT EXISTS user_tz(
+          user INTEGER PRIMARY KEY,
+          tz   TEXT
+        );
+        """); await db.commit()
 
-###################################################################
-# /start text
-###################################################################
-START_MSG = (
-    "👋 *Reminder Bot*\n\n"
-    "/add – new reminder\n"
-    "/list – show reminders\n"
-    "/delete <n> – remove one"
-)
-
-async def cmd_start(u: Update, _):
-    await u.message.reply_text(START_MSG, parse_mode="Markdown")
-
-###################################################################
-# /add conversation
-###################################################################
-async def add1(u: Update, _):
-    await u.message.reply_text("Send the task text."); return ASK_TEXT
-
-async def add2(u: Update, ctx):
-    print("DEBUG add2() fired, got:", u.message.text)     #  ⇦ add this line
-    ctx.user_data["task"] = u.message.text.strip(); ctx.user_data["days"] = set()
-    kb = [[Btn(d, callback_data=d)] for d in WEEK] + [[Btn("✅ done", callback_data="done")]]
-    await u.message.reply_text("Choose weekday(s):", reply_markup=KB(kb))
-    return ASK_DAY
-
-async def add3(q_upd: Update, ctx):
-    q = q_upd.callback_query; await q.answer(); d = q.data
-    if d != "done":
-        s = ctx.user_data["days"]; s.discard(d) if d in s else s.add(d)
-        txt = ", ".join(sorted(s)) or "(none)"; await q.edit_message_text(txt)
-        return ASK_DAY
-    if not ctx.user_data["days"]:
-        await q.edit_message_text("❌ No days – cancelled."); return ConversationHandler.END
-    await q.edit_message_text("Send time (19:30, 7pm, 7:15 am)"); return ASK_TIME
-
-async def add4(u: Update, ctx):
-    m = TIME_RX.match(u.message.text.strip().replace(" ", ""))
-    if not m: return await u.message.reply_text("❌ Try 19:30 or 7pm.")
-    h, mnt = int(m.group(1)), int(m.group(2) or 0); ampm = m.group(3)
-    if ampm: h = (h % 12) + (12 if ampm.lower() == "pm" else 0)
-    if not (0 <= h < 24 and 0 <= mnt < 60):
-        return await u.message.reply_text("❌ Invalid time.")
-    user, text = u.effective_user.id, ctx.user_data["task"]
-    days = ",".join(sorted(ctx.user_data["days"]))
+async def user_tz(uid):            # default UTC
     async with aiosqlite.connect(DB) as db:
-        await db.execute("INSERT INTO tasks(user,text,days,h,m) VALUES(?,?,?,?,?)",
-                         (user, text, days, h, mnt)); await db.commit()
-    await schedule_one(user, text, days, h, mnt, ctx)
-    await u.message.reply_text("✅ Saved!"); return ConversationHandler.END
+        row = await (await db.execute("SELECT tz FROM user_tz WHERE user=?", (uid,))).fetchone()
+    return row[0] if row else "UTC"
 
-###################################################################
-# Scheduler
-###################################################################
-async def schedule_one(user, text, days, h, mnt, app):
-    for d in days.split(','):
-        name = f"{user}:{text}:{d}:{h}{mnt}"
-        for j in app.job_queue.get_jobs_by_name(name): j.schedule_removal()
-        app.job_queue.run_daily(send,
-            dt.time(hour=h, minute=mnt), days=(WEEK.index(d),),
-            data=dict(uid=user, msg=text), name=name)
+# ───────────────────────── helpers ─────────────────────────── #
+async def schedule(uid, text, mode, payload, h, m, app):
+    tz = ZoneInfo(await user_tz(uid))
+    jq = app.job_queue
+    if mode == "weekday":
+        for d in payload.split(","):
+            name = f"{uid}:{text}:{d}:{h}{m}"
+            for j in jq.get_jobs_by_name(name): j.schedule_removal()
+            jq.run_daily(send, dt.time(h, m, tzinfo=tz),
+                         days=(WEEK.index(d),), name=name,
+                         data=dict(uid=uid, msg=text))
+    else:                               # one-off dates
+        for ds in payload.split(","):
+            y,mo,dy = map(int, ds.split("-"))
+            when = dt.datetime(y,mo,dy,h,m, tzinfo=tz)
+            if when > dt.datetime.now(tz):
+                jq.run_once(send, when, data=dict(uid=uid, msg=text))
 
 async def send(ctx: ContextTypes.DEFAULT_TYPE):
-    await ctx.bot.send_message(ctx.job.data["uid"], f"🔔 {ctx.job.data['msg']}")
+    d = ctx.job.data; await ctx.bot.send_message(d["uid"], f"🔔 {d['msg']}")
 
-###################################################################
-# /list and /delete
-###################################################################
-async def cmd_list(u: Update, _):
+# ───────────────────────── commands ────────────────────────── #
+WELCOME = (
+    "👋  Reminder Bot\n\n"
+    "/add – new reminder\n"
+    "/list – show reminders\n"
+    "/delete <n> – remove one\n"
+    "/settz Region/City – timezone"
+)
+async def start(u: Update, _):  await u.message.reply_text(WELCOME, parse_mode=TG.ParseMode.MARKDOWN)
+
+async def settz(u: Update, ctx):
+    if not ctx.args:
+        return await u.message.reply_text("Usage: /settz EST  or  /settz PST")
+    TZ_MAP = {
+    "est": "America/New_York",
+    "eastern standard time": "America/New_York",
+    "pst": "America/Los_Angeles",
+    "pacific time": "America/Los_Angeles",
+}
+    tz_input = " ".join(ctx.args).lower()
+    tz       = TZ_MAP.get(tz_input, tz_input)
+    try: ZoneInfo(ctx.args[0])
+    except ZoneInfoNotFoundError: return await u.message.reply_text("❌ Unknown TZ.")
+    async with aiosqlite.connect(DB) as db:
+        await db.execute("INSERT INTO user_tz VALUES(?,?) ON CONFLICT(user) DO UPDATE SET tz=excluded.tz",
+                         (u.effective_user.id, ctx.args[0])); await db.commit()
+    await u.message.reply_text(f"✅ Timezone set to {ctx.args[0]}")
+
+# ───── conversation: /add ───── #
+async def add_1(u: Update, _):
+    await u.message.reply_text("Send the *task text*.", parse_mode=TG.ParseMode.MARKDOWN); return ASK_TXT
+
+async def add_2(u: Update, ctx):
+    ctx.user_data["task"] = u.message.text.strip()
+    kb = KB([[Btn("📅 one-off date(s)", callback_data="date")],
+             [Btn("🔁 weekly pattern", callback_data="week")]])
+    await u.message.reply_text("One-off or weekly?", reply_markup=kb); return CHOOSE_KIND
+
+async def choose_kind(q_upd: Update, ctx):
+    kind = q_upd.callback_query.data; await q_upd.callback_query.answer()
+    ctx.user_data["kind"] = kind
+    if kind == "date":
+        await q_upd.callback_query.edit_message_text(
+    "Enter date(s) in *YYYY-MM-DD* format.\\n"
+    "Examples: `2025-06-12`  or  `2025-06-12,2025-07-01`",
+    parse_mode=TG.ParseMode.MARKDOWN
+)
+        return GET_DATES
+    ctx.user_data["wds"] = set()
+    kb = [[Btn(d, callback_data=d)] for d in WEEK] + [[Btn("✅ done", callback_data="done")]]
+    await q_upd.callback_query.edit_message_text("Choose weekday(s):", reply_markup=kb); return GET_WEEKDAYS
+
+async def collect_dates(u: Update, ctx):
+    if not DATE_RX.match(u.message.text.strip()):
+        return await u.message.reply_text("❌ Wrong date format.")
+    ctx.user_data["dates"] = u.message.text.replace(" ", "").split(",")
+    await u.message.reply_text("Now send the time (19:30 or 7 pm)"); return GET_TIME
+
+async def collect_wd(q_upd: Update, ctx):
+    q = q_upd.callback_query; await q.answer(); d = q.data
+    if d != "done":
+        s = ctx.user_data["wds"]; s.discard(d) if d in s else s.add(d)
+        await q.edit_message_text(", ".join(sorted(s)) or "(none)"); return GET_WEEKDAYS
+    if not ctx.user_data["wds"]:
+        await q.edit_message_text("❌ No days – cancelled."); return ConversationHandler.END
+    await q.edit_message_text("Time? (24-h or 7 pm)"); return GET_TIME
+
+async def collect_time(u: Update, ctx):
+    m = TIME_RX.match(u.message.text)
+    if not m: return await u.message.reply_text("❌ Time format.")
+    h, mn = int(m.group(1)), int(m.group(2) or 0); ap = m.group(3)
+    if ap: h = (h % 12) + (12 if ap.lower() == "pm" else 0)
+    uid, text = u.effective_user.id, ctx.user_data["task"]
+    if ctx.user_data["kind"] == "date":
+        payload = ",".join(ctx.user_data["dates"]); mode = "date"
+    else:
+        payload = ",".join(sorted(ctx.user_data["wds"])); mode = "weekday"
+    async with aiosqlite.connect(DB) as db:
+        await db.execute("INSERT INTO tasks(user,text,mode,payload,hour,minute) VALUES(?,?,?,?,?,?)",
+                         (uid, text, mode, payload, h, mn)); await db.commit()
+    await schedule(uid, text, mode, payload, h, mn, u.get_bot())
+    await u.message.reply_text("✅ Saved!"); return ConversationHandler.END
+
+# ───────── list / delete ───────── #
+# ───────── list / delete ───────── #
+async def list_cmd(u: Update, _):
     uid = u.effective_user.id
     async with aiosqlite.connect(DB) as db:
         rows = await (await db.execute(
-            "SELECT id,text,days,h,m FROM tasks WHERE user=?", (uid,))).fetchall()
-    if not rows: return await u.message.reply_text("No reminders.")
-    lines = [f"{i+1}. {t} ({d} @ {h:02d}:{m:02d})" for i,(_,t,d,h,m) in enumerate(rows)]
-    await u.message.reply_text("\n".join(lines))
+            "SELECT text,mode,payload,hour,minute FROM tasks WHERE user=?", (uid,)
+        )).fetchall()
 
-async def cmd_del(u: Update, ctx):
-    if not ctx.args: return await u.message.reply_text("Usage: /delete <n>")
-    try: n = int(ctx.args[0]) - 1; assert n>=0
-    except: return await u.message.reply_text("Bad number.")
+    if not rows:
+        return await u.message.reply_text("No reminders.")
+
+    tz = await user_tz(uid)
+    out = []
+    for i, (t, mode, p, h, mn) in enumerate(rows, 1):
+        when = p if mode == "weekday" else p.replace(",", " • ")
+        out.append(f"{i}. {t} ({when} @ {h:02d}:{mn:02d} {tz})")
+
+    await u.message.reply_text("\n".join(out))
+
+
+async def del_cmd(u: Update, ctx):
+    if not ctx.args:
+        return await u.message.reply_text("Usage: /delete <n>")
+    try:
+        idx = int(ctx.args[0]) - 1
+        assert idx >= 0
+    except Exception:
+        return await u.message.reply_text("Bad number.")
+
     uid = u.effective_user.id
     async with aiosqlite.connect(DB) as db:
         rows = await (await db.execute(
-            "SELECT id,text,days,h,m FROM tasks WHERE user=?", (uid,))).fetchall()
-        if n>=len(rows): return await u.message.reply_text("Not found.")
-        row_id, text, days, h, m = rows[n]
-        await db.execute("DELETE FROM tasks WHERE id=?", (row_id,)); await db.commit()
-    for d in days.split(','):
-        for j in ctx.job_queue.get_jobs_by_name(f"{uid}:{text}:{d}:{h}{m}"): j.schedule_removal()
+            "SELECT id,text,mode,payload,hour,minute FROM tasks WHERE user=?", (uid,)
+        )).fetchall()
+
+        if idx >= len(rows):
+            return await u.message.reply_text("No such item.")
+
+        row_id, text, mode, payload, h, mn = rows[idx]
+        await db.execute("DELETE FROM tasks WHERE id=?", (row_id,))
+        await db.commit()
+
+    # cancel scheduled jobs
+    for d in (payload.split(",") if mode == "weekday" else [""]):
+        for j in u.get_bot().job_queue.get_jobs_by_name(f"{uid}:{text}:{d}:{h}{mn}"):
+            j.schedule_removal()
+
     await u.message.reply_text("Deleted!")
 
-###################################################################
-# Main
-###################################################################
-async def raw_log(update, _):
-    print("DEBUG raw update:", update)
-
-# register at the bottom (inside main, before app.start())
+# ───────────────────────── main ───────────────────────────── #
 async def main():
     await init_db()
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv = ConversationHandler(
-        entry_points=[CommandHandler("add", add1)],
+        entry_points=[CommandHandler("add", add_1)],
         states={
-            ASK_TEXT:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add2)],
-            ASK_DAY:   [CallbackQueryHandler(add3)],
-            ASK_TIME:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add4)]
-        }, fallbacks=[], allow_reentry=True)
+            ASK_TXT:       [MessageHandler(filters.TEXT & ~filters.COMMAND, add_2)],
+            CHOOSE_KIND:   [CallbackQueryHandler(choose_kind)],
+            GET_DATES:     [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_dates)],
+            GET_WEEKDAYS:  [CallbackQueryHandler(collect_wd)],
+            GET_TIME:      [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
+        },
+        fallbacks=[], allow_reentry=True)
 
-    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("start",   start))
+    app.add_handler(CommandHandler("settz",   settz))
     app.add_handler(conv)
-    app.add_handler(CommandHandler("list", cmd_list))
-    app.add_handler(CommandHandler("delete", cmd_del))
+    app.add_handler(CommandHandler("list",    list_cmd))
+    app.add_handler(CommandHandler("delete",  del_cmd))
 
-    # restore on boot
+    # restore jobs
     async with aiosqlite.connect(DB) as db:
-        async for uid, t, d, h, m in (
-            await db.execute("SELECT user,text,days,h,m FROM tasks")):
-            await schedule_one(uid, t, d, h, m, app)
+        async for uid,t,m,p,h,mn in (await db.execute(
+                "SELECT user,text,mode,payload,hour,minute FROM tasks")):
+            await schedule(uid,t,m,p,h,mn,app)
 
     await app.initialize(); await app.start(); await app.updater.start_polling()
     await asyncio.Event().wait()
