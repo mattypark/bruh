@@ -7,6 +7,9 @@
 # ▸ Tested with python-telegram-bot 22.1 + aiosqlite               #
 ###################################################################
 
+# print("DEBUG add2() fired, got:", u.message.text)
+# app.add_handler(MessageHandler(filters.ALL, raw_log), group=-1)
+
 BOT_TOKEN = "7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI"   # ← replace & save
 
 import asyncio, datetime as dt, logging, re, aiosqlite
@@ -53,8 +56,9 @@ async def add1(u: Update, _):
     await u.message.reply_text("Send the task text."); return ASK_TEXT
 
 async def add2(u: Update, ctx):
+    print("DEBUG add2() fired, got:", u.message.text)     #  ⇦ add this line
     ctx.user_data["task"] = u.message.text.strip(); ctx.user_data["days"] = set()
-    kb = [[Btn(d, d)] for d in WEEK] + [[Btn("✅ done", "done")]]
+    kb = [[Btn(d, callback_data=d)] for d in WEEK] + [[Btn("✅ done", callback_data="done")]]
     await u.message.reply_text("Choose weekday(s):", reply_markup=KB(kb))
     return ASK_DAY
 
@@ -127,6 +131,10 @@ async def cmd_del(u: Update, ctx):
 ###################################################################
 # Main
 ###################################################################
+async def raw_log(update, _):
+    print("DEBUG raw update:", update)
+
+# register at the bottom (inside main, before app.start())
 async def main():
     await init_db()
     app = Application.builder().token(BOT_TOKEN).build()
