@@ -1,0 +1,42 @@
+/Users/matthewpark/Downloads/current-projects/Telegram/reminder_bot.py:264: PTBUserWarning: If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message. Read this FAQ entry to learn more about the per_* settings: https://github.com/python-telegram-bot/python-telegram-bot/wiki/Frequently-Asked-Questions#what-do-the-per_-settings-in-conversationhandler-do.
+  conv = ConversationHandler(
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getMe "HTTP/1.1 200 OK"
+INFO:apscheduler.scheduler:Scheduler started
+INFO:telegram.ext.Application:Application started
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/deleteWebhook "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/answerCallbackQuery "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/editMessageText "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:apscheduler.scheduler:Added job "8051830313:Test:2025-6-10:1219" to job store "default"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
+INFO:apscheduler.scheduler:Removed job 9dab9edf4b484bce99fbe35be18a2124
+INFO:apscheduler.executors.default:Running job "8051830313:Test:2025-6-10:1219 (trigger: date[2025-06-10 16:19:00 UTC], next run at: 2025-06-10 16:19:00 UTC)" (scheduled at 2025-06-10 16:19:00.000104+00:00)
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/sendMessage "HTTP/1.1 200 OK"
+INFO:apscheduler.executors.default:Job "8051830313:Test:2025-6-10:1219 (trigger: date[2025-06-10 16:19:00 UTC], next run at: 2025-06-10 16:19:00 UTC)" executed successfully
+INFO:httpx:HTTP Request: POST https://api.telegram.org/bot7741584010:AAEQrh7d6VgEIkXMOd5dnpb6U6G31uGFkfI/getUpdates "HTTP/1.1 200 OK"
