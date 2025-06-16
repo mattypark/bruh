@@ -1,2 +1,6 @@
 python-telegram-bot==22.1
 aiosqlite
+aiohttp
+httpx
+python-dotenv
+dateparser

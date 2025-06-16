@@ -19,6 +19,8 @@ from telegram.ext import (
 )
 import httpx
 from aiohttp import web
+import dateparser
+from dateparser.search import search_dates
 
 # ───────────────────────── constants ───────────────────────── #
 BOT_TOKEN   = os.getenv("BOT_TOKEN")
@@ -252,7 +254,56 @@ async def del_cmd(u: Update, ctx):
         await db.execute("DELETE FROM tasks WHERE id=?", (row_id,))
         await db.commit()
     await u.message.reply_text("Deleted!")
+    
+async def natural_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Free‐form natural‐language reminder parser using dateparser.search.
+    """
+    user_text = update.message.text
+    # load the user's timezone
+    tz = await user_tz(update.effective_user.id)
 
+    # search_dates will return a list of (matched_string, datetime) tuples
+    settings = {
+        "TIMEZONE": tz,
+        "RETURN_AS_TIMEZONE_AWARE": True,
+        "PREFER_DATES_FROM": "future",    # so "Tuesday" won't pick last week
+    }
+    results = search_dates(user_text, settings=settings)
+
+    if not results:
+        return await update.message.reply_text(
+            "❌ Couldn't understand that time.  Please try something like:\n"
+            "`I have a flight at 2pm tomorrow`\n"
+            "`Walk dogs at 5:30 pm this Tuesday`",
+            parse_mode=TG.ParseMode.MARKDOWN
+        )
+
+    # grab the *last* dateparser hit
+    _, dt_obj = results[-1]
+
+    # use the full original text as your reminder text
+    task_text = user_text.strip()
+    y, mo, d, h, m = dt_obj.year, dt_obj.month, dt_obj.day, dt_obj.hour, dt_obj.minute
+    payload = f"{y}-{mo}-{d}"
+    mode    = "date"
+
+    # persist to your SQLite
+    async with aiosqlite.connect(DB) as db:
+        await db.execute(
+            "INSERT INTO tasks(user,text,mode,payload,hour,minute) VALUES(?,?,?,?,?,?)",
+            (update.effective_user.id, task_text, mode, payload, h, m)
+        )
+        await db.commit()
+
+    # schedule it on your JobQueue (same as before)
+    await schedule(update.effective_user.id, task_text, mode, payload, h, m, ctx.application)
+
+    # confirm
+    await update.message.reply_text(
+        f"✅ Reminder set for {dt_obj:%c}",
+        parse_mode=TG.ParseMode.MARKDOWN
+    )
 # ───────────────────────── main ───────────────────────────── #
 async def main():
     await init_db()
@@ -275,6 +326,7 @@ async def main():
     app.add_handler(conv)
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("delete", del_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, natural_add))
 
     # republish any existing tasks to QStash
     async with aiosqlite.connect(DB) as db:
