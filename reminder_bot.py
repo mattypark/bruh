@@ -256,54 +256,41 @@ async def del_cmd(u: Update, ctx):
     await u.message.reply_text("Deleted!")
     
 async def natural_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """
-    Free‐form natural‐language reminder parser using dateparser.search.
-    """
-    user_text = update.message.text
-    # load the user's timezone
-    tz = await user_tz(update.effective_user.id)
-
-    # search_dates will return a list of (matched_string, datetime) tuples
+    """Free-form natural-language reminder parser."""
+    text_raw = update.message.text
     settings = {
-        "TIMEZONE": tz,
-        "RETURN_AS_TIMEZONE_AWARE": True,
-        "PREFER_DATES_FROM": "future",    # so "Tuesday" won't pick last week
+        "TIMEZONE": await user_tz(update.effective_user.id),
+        "RETURN_AS_TIMEZONE_AWARE": True
     }
-    results = search_dates(user_text, settings=settings)
-
-    if not results:
+    # find any date-like substring + its datetime
+    result = search_dates(text_raw, settings=settings)
+    if not result:
         return await update.message.reply_text(
-            "❌ Couldn't understand that time.  Please try something like:\n"
-            "`I have a flight at 2pm tomorrow`\n"
-            "`Walk dogs at 5:30 pm this Tuesday`",
-            parse_mode=TG.ParseMode.MARKDOWN
+            "❌ Couldn't understand that time. Please rephrase."
         )
+    matched_str, dt = result[0]
 
-    # grab the *last* dateparser hit
-    _, dt_obj = results[-1]
+    # strip out the matched time phrase, what remains is the subject
+    subject = text_raw.replace(matched_str, "").strip()
+    if not subject:
+        subject = "Reminder"
 
-    # use the full original text as your reminder text
-    task_text = user_text.strip()
-    y, mo, d, h, m = dt_obj.year, dt_obj.month, dt_obj.day, dt_obj.hour, dt_obj.minute
+    # now build payload & persist exactly as before
+    y, mo, d, h, m = dt.year, dt.month, dt.day, dt.hour, dt.minute
     payload = f"{y}-{mo}-{d}"
     mode    = "date"
-
-    # persist to your SQLite
     async with aiosqlite.connect(DB) as db:
         await db.execute(
             "INSERT INTO tasks(user,text,mode,payload,hour,minute) VALUES(?,?,?,?,?,?)",
-            (update.effective_user.id, task_text, mode, payload, h, m)
+            (update.effective_user.id, subject, mode, payload, h, m)
         )
         await db.commit()
 
-    # schedule it on your JobQueue (same as before)
-    await schedule(update.effective_user.id, task_text, mode, payload, h, m, ctx.application)
+    # schedule a job whose .data['msg'] is *just* the subject
+    await schedule(update.effective_user.id, subject, mode, payload, h, m, ctx.application)
 
-    # confirm
-    await update.message.reply_text(
-        f"✅ Reminder set for {dt_obj:%c}",
-        parse_mode=TG.ParseMode.MARKDOWN
-    )
+    # tell the user exactly when it’s set
+    await update.message.reply_text(f"✅ Reminder set for {dt:%c}")
 # ───────────────────────── main ───────────────────────────── #
 async def main():
     await init_db()
